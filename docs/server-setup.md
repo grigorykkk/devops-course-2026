@@ -297,6 +297,41 @@ ls -l ~/app/.env    # -rw------- (600)
 
 ---
 
+## 10. Ansible (ПР11)
+
+Проект лежит в каталоге `ansible/` этого репозитория, все команды выполняются из него (там же `ansible.cfg`).
+
+- **Управляющий узел:** мой компьютер (Linux) с ansible-core 2.19, sshpass и коллекциями из `ansible/requirements.yml` (ansible.posix 1.6.2, community.docker 4.5.0, community.general 9.5.0).
+- **Управляемый узел:** VM `devops-vm`, Ubuntu Server 24.04 amd64, Host-only адрес `192.168.56.101`, SSH на порту 22. Перед работой VM возвращается к снимку `01-clean-install`.
+- **Inventory:**
+  - `inventory/bootstrap.ini` — первичный запуск от `student` по паролю (`--ask-pass --ask-become-pass`);
+  - `inventory/prod.ini` — все следующие запуски от `devops` по ключу `~/.ssh/devops_vm`, без ввода пароля (выбран по умолчанию в `ansible.cfg`).
+- **Роли:**
+  - `base` — проверка ОС, базовые пакеты, `python3-debian` и `python3-requests`, официальный репозиторий Docker (deb822), Docker Engine;
+  - `ssh` — пользователь `devops`, ключ, NOPASSWD sudo, `/etc/ssh/sshd_config.d/00-ansible-hardening.conf` (пароли и root запрещены), UFW: deny incoming, allow 22 и 80;
+  - `nginx` — Nginx как reverse proxy на `127.0.0.1:5000`, сайт default отключён, handlers `nginx -t` → reload;
+  - `app` — загрузка образа и запуск контейнера, проверка `/health`.
+- **Образ:** `ghcr.io/grigorykkk/devops-ci-app`, тег — полный SHA `bb8a04360238cf9f2adb6d11d1e52171a7f158c5` (переменная `app_tag` в `group_vars/all.yml`, `latest` не используется).
+- **Контейнер:** `devops-ci-app`, публикация `127.0.0.1:5000 → 5000`, `restart_policy: unless-stopped`; наружу открыт только порт 80 через Nginx.
+- **Health endpoint:** `http://192.168.56.101/health` → `{"status":"ok"}`.
+
+Команды:
+
+```bash
+cd ansible
+ansible-galaxy collection install -r requirements.yml
+# первичный запуск на чистой VM
+ansible-playbook -i inventory/bootstrap.ini site.yml --ask-pass --ask-become-pass
+# повторные запуски (ожидается changed=0)
+ansible-playbook site.yml
+# read-only аудит (ничего не меняет, changed=0)
+ansible-playbook verify.yml
+```
+
+Смена версии приложения — только через `app_tag`. Пароли и закрытый ключ в репозиторий не кладутся.
+
+---
+
 ## Быстрый чеклист восстановления (≈10 мин)
 
 1. Откат на `01-clean-install`, сеть NAT+Host-only, IP зафиксирован.
