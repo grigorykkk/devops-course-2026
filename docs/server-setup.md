@@ -301,34 +301,34 @@ ls -l ~/app/.env    # -rw------- (600)
 
 Проект лежит в каталоге `ansible/` этого репозитория, все команды выполняются из него (там же `ansible.cfg`).
 
-- **Управляющий узел:** мой компьютер (Linux) с ansible-core 2.19, sshpass и коллекциями из `ansible/requirements.yml` (ansible.posix 1.6.2, community.docker 4.5.0, community.general 9.5.0).
-- **Управляемый узел:** VM `devops-vm`, Ubuntu Server 24.04 amd64, Host-only адрес `192.168.56.101`, SSH на порту 22. Перед работой VM возвращается к снимку `01-clean-install`.
+- **Управляющий узел:** мой компьютер (Linux) с ansible-core 2.19 и коллекциями из `ansible/requirements.yml` (ansible.posix 1.6.2, community.docker 4.5.0, community.general 9.5.0).
+- **Управляемый узел:** VPS `89.169.7.50` (hostname `devops-vm`), Ubuntu Server 22.04 amd64, SSH на порту `2222`, вход только по ключу. На сервере уже работают ПР5–7 (`devops.local`, `/app/` → `127.0.0.1:5000`) и КР2 (`api.devops.local` → `127.0.0.1:8001`), плейбук их не трогает.
 - **Inventory:**
-  - `inventory/bootstrap.ini` — первичный запуск от `student` по паролю (`--ask-pass --ask-become-pass`);
-  - `inventory/prod.ini` — все следующие запуски от `devops` по ключу `~/.ssh/devops_vm`, без ввода пароля (выбран по умолчанию в `ansible.cfg`).
+  - `inventory/bootstrap.ini` — первый запуск от администратора `devops` по ключу `~/.ssh/devops_vm` (пользователь и ключ созданы в ПР5, вход по паролю на сервере уже отключён);
+  - `inventory/prod.ini` — все следующие запуски от служебного пользователя `ansible` по ключу `~/.ssh/ansible_vps`, без ввода пароля (выбран по умолчанию в `ansible.cfg`).
 - **Роли:**
-  - `base` — проверка ОС, базовые пакеты, `python3-debian` и `python3-requests`, официальный репозиторий Docker (deb822), Docker Engine;
-  - `ssh` — пользователь `devops`, ключ, NOPASSWD sudo, `/etc/ssh/sshd_config.d/00-ansible-hardening.conf` (пароли и root запрещены), UFW: deny incoming, allow 22 и 80;
-  - `nginx` — Nginx как reverse proxy на `127.0.0.1:5000`, сайт default отключён, handlers `nginx -t` → reload;
+  - `base` — проверка ОС (Ubuntu 22.04/24.04), базовые пакеты, `python3-debian` и `python3-requests`, официальный репозиторий Docker в формате deb822 (старый `docker.list` из ПР7 удаляется), Docker Engine;
+  - `ssh` — ключ `devops` сохраняется, создаётся пользователь `ansible` с ключом и NOPASSWD sudo, `/etc/ssh/sshd_config.d/99-hardening.conf` (порт 2222, пароли и root запрещены, `AllowUsers devops ansible`), UFW: deny incoming, allow 80 и 443, limit 2222;
+  - `nginx` — отдельный сайт `ci.devops.local` (HTTP :80) с reverse proxy на `127.0.0.1:5001`, существующие сайты не меняются, handlers `nginx -t` → reload;
   - `app` — загрузка образа и запуск контейнера, проверка `/health`.
 - **Образ:** `ghcr.io/grigorykkk/devops-ci-app`, тег — полный SHA `bb8a04360238cf9f2adb6d11d1e52171a7f158c5` (переменная `app_tag` в `group_vars/all.yml`, `latest` не используется).
-- **Контейнер:** `devops-ci-app`, публикация `127.0.0.1:5000 → 5000`, `restart_policy: unless-stopped`; наружу открыт только порт 80 через Nginx.
-- **Health endpoint:** `http://192.168.56.101/health` → `{"status":"ok"}`.
+- **Контейнер:** `devops-ci-app`, публикация `127.0.0.1:5001 → 5000` (порт 5000 занят приложением ПР7), `restart_policy: unless-stopped`.
+- **Health endpoint:** `curl -H "Host: ci.devops.local" http://89.169.7.50/health` → `{"status":"ok"}`.
 
 Команды:
 
 ```bash
 cd ansible
 ansible-galaxy collection install -r requirements.yml
-# первичный запуск на чистой VM
-ansible-playbook -i inventory/bootstrap.ini site.yml --ask-pass --ask-become-pass
+# первый запуск (создаёт пользователя ansible)
+ansible-playbook -i inventory/bootstrap.ini site.yml
 # повторные запуски (ожидается changed=0)
 ansible-playbook site.yml
 # read-only аудит (ничего не меняет, changed=0)
 ansible-playbook verify.yml
 ```
 
-Смена версии приложения — только через `app_tag`. Пароли и закрытый ключ в репозиторий не кладутся.
+Смена версии приложения — только через `app_tag`. Пароли и закрытые ключи в репозиторий не кладутся.
 
 ---
 
