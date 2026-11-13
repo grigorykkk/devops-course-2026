@@ -1,0 +1,72 @@
+---
+- name: Keep admin key from PR5
+  ansible.posix.authorized_key:
+    user: "{{ admin_user }}"
+    state: present
+    key: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/devops_vm.pub') }}"
+
+- name: Create automation user
+  ansible.builtin.user:
+    name: "{{ automation_user }}"
+    shell: /bin/bash
+    create_home: true
+
+- name: Create SSH directory
+  ansible.builtin.file:
+    path: "/home/{{ automation_user }}/.ssh"
+    state: directory
+    owner: "{{ automation_user }}"
+    group: "{{ automation_user }}"
+    mode: "0700"
+
+- name: Install automation public key
+  ansible.posix.authorized_key:
+    user: "{{ automation_user }}"
+    state: present
+    key: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/ansible_vps.pub') }}"
+    manage_dir: false
+
+- name: Allow non-interactive automation sudo
+  ansible.builtin.copy:
+    content: "{{ automation_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    dest: "/etc/sudoers.d/{{ automation_user }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Harden SSH only after key installation
+  ansible.builtin.template:
+    src: 99-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/99-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "sshd -t -f %s"
+  notify: Reload SSH
+
+- name: Allow management and web ports
+  community.general.ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port }}"
+    proto: tcp
+    comment: "{{ item.comment }}"
+  loop:
+    - { rule: allow, port: "80", comment: "HTTP" }
+    - { rule: allow, port: "443", comment: "HTTPS" }
+    - { rule: limit, port: "{{ ssh_port }}", comment: "SSH rate-limited" }
+
+- name: Set incoming firewall policy
+  community.general.ufw:
+    default: deny
+    direction: incoming
+
+- name: Set outgoing firewall policy
+  community.general.ufw:
+    default: allow
+    direction: outgoing
+
+- name: Enable firewall
+  community.general.ufw:
+    state: enabled
+    logging: medium

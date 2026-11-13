@@ -1,0 +1,10 @@
+---
+- name: Configure and deploy devops VPS
+  hosts: vps
+  become: true
+
+  roles:
+    - base
+    - ssh
+    - nginx
+    - app
