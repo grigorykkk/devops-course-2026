@@ -158,7 +158,7 @@ check "порт 5432 не слушается вне 127.0.0.1" \
   '
 
 check "права ~/app/.env == 600" \
-  bash -c '[[ -f "$HOME/app/.env" && "$(stat -c %a "$HOME/app/.env")" == "600" ]]'
+  bash -c '[[ -f "/home/devops/app/.env" && "$(stat -c %a "/home/devops/app/.env")" == "600" ]]'
 
 echo
 echo "========================================"
