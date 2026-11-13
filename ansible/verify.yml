@@ -1,6 +1,6 @@
 ---
 - name: Verify deployed configuration
-  hosts: vm
+  hosts: vps
   become: true
   gather_facts: true
 
@@ -10,11 +10,12 @@
       register: sshd_effective
       changed_when: false
 
-    - name: Assert password authentication is disabled
+    - name: Assert SSH hardening is in place
       ansible.builtin.assert:
         that:
-          - "'passwordauthentication no' in sshd_effective.stdout"
-          - "'permitrootlogin no' in sshd_effective.stdout"
+          - "'port ' ~ ssh_port in sshd_effective.stdout_lines"
+          - "'passwordauthentication no' in sshd_effective.stdout_lines"
+          - "'permitrootlogin no' in sshd_effective.stdout_lines"
 
     - name: Read container facts
       community.docker.docker_container_info:
@@ -24,6 +25,7 @@
     - name: Assert container is running
       ansible.builtin.assert:
         that:
+          - container_info.exists
           - container_info.container.State.Running
 
     - name: Check direct application health

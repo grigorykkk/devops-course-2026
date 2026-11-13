@@ -1,5 +1,11 @@
 ---
-- name: Restart SSH
+- name: Validate full SSH configuration
+  ansible.builtin.command: sshd -t
+  changed_when: false
+  listen: Reload SSH
+
+- name: Reload SSH service
   ansible.builtin.service:
     name: ssh
-    state: restarted
+    state: reloaded
+  listen: Reload SSH

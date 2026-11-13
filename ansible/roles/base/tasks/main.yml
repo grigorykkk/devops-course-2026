@@ -1,11 +1,11 @@
 ---
-- name: Assert supported VM platform
+- name: Assert supported server platform
   ansible.builtin.assert:
     that:
       - ansible_distribution == "Ubuntu"
-      - ansible_distribution_version is version("24.04", "==")
+      - ansible_distribution_version in ["22.04", "24.04"]
       - ansible_architecture == "x86_64"
-    fail_msg: "Требуется Ubuntu Server 24.04 amd64"
+    fail_msg: "Требуется Ubuntu Server 22.04 или 24.04 amd64"
 
 - name: Install base packages and remote module dependencies
   ansible.builtin.apt:
@@ -20,6 +20,11 @@
     state: present
     update_cache: true
     cache_valid_time: 3600
+
+- name: Remove manually added Docker list from PR7
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/docker.list
+    state: absent
 
 - name: Add Docker official repository
   ansible.builtin.deb822_repository:
@@ -42,6 +47,7 @@
       - docker-compose-plugin
     state: present
     update_cache: true
+    cache_valid_time: 3600
 
 - name: Enable Docker service
   ansible.builtin.service:
